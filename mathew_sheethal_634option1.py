@@ -26,6 +26,7 @@ attributes.describe()
 
 #Cleaning up anomalies in data and handling null data
 diabetes_data = attributes.copy(deep = True)
+
 diabetes_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']] = diabetes_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']].replace(0,np.NaN)
 diabetes_data['Glucose'].fillna(diabetes_data['Glucose'].mean(), inplace = True)
 diabetes_data['BloodPressure'].fillna(diabetes_data['BloodPressure'].mean(), inplace = True)
@@ -91,7 +92,14 @@ svc.fit(test_attributes, testLabel)
 svc_disp = plot_roc_curve(svc, test_attributes, testLabel)
 svc_disp.plot(ax=ax, alpha=0.8)
 
-#plt.show()
+plt.show()
+
+randModel = RandomForestClassifier(n_estimators=10, random_state=42)
+randModel.fit(trainAttr, trainLabel)
+ax = plt.gca()
+randModel_disp = plot_roc_curve(randModel, testAttr, testLabel, ax=ax, alpha=0.8)
+svc_disp.plot(ax=ax, alpha=0.8)
+plt.show()
 
 """KNN Algorithm 
 
@@ -131,11 +139,14 @@ test_calc = []
 train_calc = []
 for i in range(1,7):
   knn = KNeighborsClassifier(i)
-  knn.fit(Attr_train, label_train)
+  #knn.fit(Attr_train, label_train)
+  knn.fit(trainAttr, trainLabel)
 
 #need to graphically represent growth
-  train_calc.append(knn.score(Attr_train, label_train))
-  test_calc.append(knn.score(Attr_test, label_test))
+  #train_calc.append(knn.score(Attr_train, label_train))
+  #test_calc.append(knn.score(Attr_test, label_test))
+  train_calc.append(knn.score(trainAttr, trainLabel))
+  test_calc.append(knn.score(testAttr, testLabel))
   test_calc
 
 #score from using same data point for testing and training will be 100
@@ -207,37 +218,99 @@ lstm_dataset = np.array(attr)
 lstm_dataset.reshape(-1,1) #normalizing
 plt.plot(lstm_dataset) #visualize
 
-#machine learning works better if data is scaled
-scaler = MinMaxScaler()
-lstm_dataset = scaler.fit_transform(lstm_dataset)
+lstm_data=pd.read_excel('timeDiabetes.xlsx')
 
-#split data into training and testing
-test_size = len(lstm_dataset) - int(len(lstm_dataset) * 0.75) #total size of dataset minus 75% training set size
-trainingset=lstm_dataset[:int(len(lstm_dataset) * 0.75),:]
-testingset=lstm_dataset[int(len(lstm_dataset) * 0.75):142,:]
-def getdata(data,lookback):
-    X,Y=[],[]
-    for i in range(len(data)-lookback-1):
-        X.append(data[i:i+lookback,0])
-        Y.append(data[i+lookback,0])
-    return np.array(X),np.array(Y).reshape(-1,1)
-lookback=1
-X_train,y_train=getdata(trainingset,lookback)
-X_test,y_test=getdata(testingset,lookback)
-X_train=X_train.reshape(X_train.shape[0],X_train.shape[1],1)
-#X_test=X_test.reshape(X_test.shape[0],X_test.shape[1],1)
+lstm_data.head(5)
 
-deepLearnModel = Sequential()
-deepLearnModel.add(LSTM(5,input_shape=(1,lookback))) #5 neurons of first layer of neural network
-deepLearnModel.add(Dense(1))
-deepLearnModel.compile(loss='mean_squared_error', optimizer='adam',run_eagerly=True) #To avoid unexpected result of deepLearnModel.predict() function add run_eagerly
-deepLearnModel.summary()
+lstm_data.describe()
+d_data = lstm_data.copy(deep = True)
+
+d_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']] = d_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']].replace(0,np.NaN)
+d_data['Glucose'].fillna(d_data['Glucose'].mean(), inplace = True)
+d_data['BloodPressure'].fillna(d_data['BloodPressure'].mean(), inplace = True)
+d_data['SkinThickness'].fillna(d_data['SkinThickness'].median(), inplace = True)
+d_data['Insulin'].fillna(d_data['Insulin'].median(), inplace = True)
+d_data['BMI'].fillna(d_data['BMI'].median(), inplace = True)
+
+#split data into 25%test
+from sklearn.model_selection import train_test_split
+new_dat = lstm_data.drop('Date', axis = 1)
+new_dat.head(4)
+values = new_dat.values
+
+train_set, test_set = train_test_split(new_dat, test_size=0.25, random_state=0, stratify=new_dat['Outcome'])
+
+trainAttr = train_set[train_set.columns[:8]]
+testAttr = test_set[test_set.columns[:8]]
+trainLabel = train_set['Outcome']
+testLabel = test_set['Outcome']
+
+from sklearn.preprocessing import MinMaxScaler
+test_size = len(lstm_data) - int(len(lstm_data) * 0.75) #total size of dataset minus 75% training set size
+#trainingset=lstm_data[:int(len(train_set) * 0.75),:]
+#testingset=lstm_data[int(len(lstm_data) * 0.75):142,:]
+
+test_values = test_set.values
+
+# ensure all data is float
+
+
+# normalize features
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaler_df = MinMaxScaler(feature_range=(0, 1))
+
+scaled = scaler.fit_transform(values)
+test_scaled = scaler.fit_transform(test_values)
+
+#df = scaler_df.fit_transform(df1)
+
+# train the training set and test the testing set
+train=scaled
+test=test_scaled
+
+split= round(len(train)*0.8)
+
+# split into input and outputs
+train_X0, train_y0 = train[:split, 1:], train[:split, 0]
+val_X0, val_y0 = train[split:,1:], train[split:,0]
+test_X0, test_y0 = test[:, 1:], test[:, 0]
+
+train_y=np.asarray(train_y0).reshape(( -1 , 1 ))
+val_y=np.asarray(val_y0).reshape(( -1 , 1 ))
+test_y=np.asarray(test_y0).reshape(( -1 , 1 ))
+
+# reshape input to be 3D [samples, timesteps, features]
+train_X = train_X0.reshape((train_X0.shape[0], 1, train_X0.shape[1]))
+val_X = val_X0.reshape((val_X0.shape[0], 1, val_X0.shape[1]))
+test_X = test_X0.reshape((test_X0.shape[0], 1, test_X0.shape[1]))
+
+#design cnn lstm model
+import datetime as dt
+from keras.layers import Dense, Activation, Dropout, LSTM, BatchNormalization
+from keras.models import Sequential, load_model
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras import optimizers
+import tensorflow as tf
+from sklearn.metrics import mean_squared_error
+lstm_model = Sequential()
+lstm_model.add(LSTM(5,input_shape=(1,lookback))) #5 neurons of first layer of neural network
+lstm_model.add(Dense(1))
+lstm_model.compile(loss='mean_squared_error', optimizer='adam',run_eagerly=True) #To avoid unexpected result of deepLearnModel.predict() function add run_eagerly
+lstm_model.summary()
 
 #model is ready for training
 
-deepLearnModel.build(input_shape=(5, 42))#if you dont build the function before fit it results in the following error: "ValueError: Creating variables on a non-first call to a function decorated with tf.function."
-deepLearnModel.fit(X_train, y_train, epochs=10, batch_size=1)
+lstm_model.build(input_shape=(5, 42))#if you dont build the function before fit it results in the following error: "ValueError: Creating variables on a non-first call to a function decorated with tf.function."
+lstm_model.fit(X_train, y_train, epochs=10, batch_size=1)
 
-y_pred=deepLearnModel.predict(X_test)
-y_test=deepLearnModel.inverse_transform(y_test)
-y_pred=scaler.inverse_transform(y_pred)
+history = lstm_model.fit(X_train, y_train, epochs=10, batch_size=1) 
+
+                #  , verbose=2, shuffle=False)
+# plot history
+plt.plot(history.history['loss'], label='train')
+plt.plot(history.history['val_loss'], label='test')
+plt.title("Loss in LSTM Training")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
