@@ -21,6 +21,18 @@ attributes = pd.read_csv('diabetes.csv')
 #printing first 5 lines of dataset
 attributes.head(5)
 
+"""#Data Manipulation
+
+---
+
+1. Reading Data
+2. Replacing 0,anamoly, with Nan
+3. Split data to training set (75%) and testing set(25%)
+
+
+
+"""
+
 #idetify anomalies using describe()
 attributes.describe()
 
@@ -36,31 +48,390 @@ diabetes_data['BMI'].fillna(diabetes_data['BMI'].median(), inplace = True)
 
 #split data into 25%test
 from sklearn.model_selection import train_test_split
-train_attributes, test_attributes = train_test_split(attributes, test_size=0.25, random_state=0, stratify=attributes['Outcome'])
-
-trainAttr = train_attributes[train_attributes.columns[:8]]
-testAttr = test_attributes[test_attributes.columns[:8]]
+'''train_attributes, test_attributes = train_test_split(attributes, test_size=0.25, random_state=0, stratify=diabetes_data['Outcome'])
+print('Shape of train attributes',train_attributes.shape) #prints 576,9col
+trainAttr = train_attributes[train_attributes.columns[:9]]
+testAttr = test_attributes[test_attributes.columns[:9]]
 trainLabel = train_attributes['Outcome']
-testLabel = test_attributes['Outcome']
+testLabel = test_attributes['Outcome']'''
+
+
+Attributes_new=attributes[['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age']]  # Attributes
+Label=attributes['Outcome']  # Labels
+
+# Split dataset into training set and test set
+Attributes_train, Attributes_test, Label_train, Label_test = train_test_split(Attributes_new, Label, test_size=0.25) # 75% training and 25% test
+
+"""# **Calculation of confusion matrix rate**
+
+'''True Positive Rate(TPR): True Positive/positive
+False Positive Rate(FPR): False Positive /Negative
+False Negative Rate(FNR): False Negative/Positive
+True Negative Rate(TNR): True Negative/Negative
+'''
+
+"""
+
+#true positive rate
+def tpr(tp,pos):
+    tprval = tp/pos
+    return tprval
+
+#false positive rate
+def fpr(fp,pos):
+  fprval = fp/pos
+  return fprval
+
+#false negative rate
+def fnr(fn,neg):
+    fnrval = fn/neg
+    return fnrval
+
+#true negative rate
+def tnr(tn,neg):
+  tnrval = tn/neg
+  return tnrval
+
+"""AOC function
+
+
+---
+
+
+"""
+
+#aOC function
+def predictProbability(attr_test, label_test):
+  prob = randModel.predict_proba(label_test)
+  prob = prob[:, 1]
+  auc = metrics.roc_auc_score(label_test, prob)
+  print('AUC score is: ',auc)
+  return auc
 
 #RandomForest Model Classification
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import metrics
 from sklearn.metrics import accuracy_score
-randModel = RandomForestClassifier(n_estimators=100,random_state=0) #n_estimators is number of trees in forest
-randModel.fit(train_attributes, trainLabel)
-predictedTest = randModel.predict(test_attributes)
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import mean_squared_error, make_scorer
+randModel = RandomForestClassifier(n_estimators=100) #n_estimators is number of trees in forest (n_estimators=100,random_state=0)
+#randModel.fit(Attributes_train, Label_train)
+#rf_predictedTest = randModel.predict(Attributes_test)
+#rf_predictedTest
 
-print('The accuracy Score is:\n',metrics.accuracy_score(predictedTest,testLabel))
+"""#**Random Forest Classify funtion**
 
-#The model seem to have an accuracy value of 64.06%
+---
+1. fit the data to randomforest model
+2. get accuracy
+3. call confusion matrix calculation function
+4. predict probability
+5. get auc score 
+6. plot roc and look at the accuracy
+
+
+
+
+"""
+
+#apply random forest on data
+def randomForesClassify(attr_train, label_train, attr_test,label_test):
+    randModel.fit(attr_train, label_train)
+    rf_predictedTest = randModel.predict(attr_test)
+    #print(rf_predictedTest)
+    accuracy_scores = cross_val_score(randModel, attr_train, label_train, scoring='accuracy', cv = 2)
+      #prints score each fold
+
+    print(accuracy_scores)
+
+    #confusion matrix below
+    rfcm = np.array(confusion_matrix(label_test, rf_predictedTest))
+    A = rfcm.flatten()
+    #print(A, A.shape) #It prints in order TP,FP,FN,TN
+    #f(4)
+    tp =A[0]
+    fp =A[1]
+    fn =A[2]
+    tn=A[3]
+    positives = tp+fp
+    negatives = fn+tn
+    fnrval = fnr(fn,negatives)
+    tprval = tpr(tp,positives)
+    tnrval = tnr(tn,negatives)
+    fprval = fpr(fp,positives)
+
+    #predictProbability(a_test, l_test)
+    #Area under curve
+    prob = randModel.predict_proba(attr_test)
+    prob = prob[:, 1]
+
+    auc = metrics.roc_auc_score(label_test, prob)
+    print('AUC score is: ',auc)
+
+    #receiver operating characteristic
+    from sklearn.metrics import plot_roc_curve
+    from sklearn.svm import SVC
+    ax = plt.gca()
+    randModel_disp = plot_roc_curve(randModel, attr_test, label_test, ax=ax, alpha=0.8)
+    svc = SVC(random_state=42)
+    svc.fit(attr_test, label_test)
+    svc_disp = plot_roc_curve(svc, attr_test, label_test)
+    svc_disp.plot(ax=ax, alpha=0.8)
+
+    plt.show()
+    rf_matrix_array =[]
+    rf_matrix_array = [tp, fp, fn, tn, fnrval, tprval, tnrval, fprval]
+    return rf_matrix_array
+
+"""# **KNN model Classify function**
+
+---
+
+1. fir knn model on training data of attributes and label
+2. predict knn score on testing set of attributes
+3. ifnd accuracy score
+4. confusion matrix against label testing data, and random forest predicted set
+5. find, fp,tp,tn,fn, fnr, tnr, tpr, fpr
+6. plot the data
+"""
+
+def knnClassify(attr_train, label_train, attr_test,label_test):
+    #use knn classifier library, datascientist have to provide the value of k
+  from sklearn.neighbors import KNeighborsClassifier
+  test_calc = []
+  train_calc = []
+  for i in range(1,7): #7 is the k=neighbor value I chose
+    knn = KNeighborsClassifier(i)
+    #knn.fit(Attr_train, label_train)
+    knn.fit(attr_train, label_train)
+
+    train_calc.append(knn.score(attr_train, label_train))
+    test_calc.append(knn.score(attr_test, label_test))
+    test_calc
+
+    '''confusion matrix
+    from sklearn.metrics import confusion_matrix
+    label_pred = knn.predict(Attr_test)
+    confusion_matrix(label_test, label_pred)
+    pd.crosstab(label_test, label_pred, rownames=['Actual'], colnames=['Predicted'], margins=True)'''
+    knn_predicted = knn.predict(attr_test)
+
+    accuracy_scores = cross_val_score(randModel, attr_train, label_train, scoring='accuracy', cv = 2)
+      #prints score each fold
+    print(accuracy_scores)
+
+    #confusion matrix below
+    rfcm = np.array(confusion_matrix(label_test, knn_predicted))
+    A = rfcm.flatten()
+    print(A, A.shape) #It prints in order TP,FP,FN,TN
+    tp =A[0]
+    fp =A[1]
+    fn =A[2]
+    tn=A[3]
+    positives = tp+fp
+    negatives = fn+tn
+    fnrval = fnr(fn,negatives)
+    tprval = tpr(tp,positives)
+    tnrval = tnr(tn,negatives)
+    fprval = fpr(fp,positives)
+
+    #predictProbability(a_test, l_test)
+    #Area under curve
+    prob = knn.predict_proba(attr_test)
+    prob = prob[:, 1]
+
+    auc = metrics.roc_auc_score(label_test, prob)
+    print('AUC score is: ',auc)
+
+    from sklearn.metrics import plot_roc_curve
+    from sklearn.svm import SVC
+    ax = plt.gca()
+    knn_dis = plot_roc_curve(knn, attr_test, label_test, ax=ax, alpha=0.8)
+    svc = SVC(random_state=42)
+    svc.fit(attr_test, label_test)
+    svc_disp = plot_roc_curve(svc, attr_test, label_test)
+    svc_disp.plot(ax=ax, alpha=0.8)
+
+    plt.show()
+    knn_matrix_array =[]
+    knn_matrix_array = [tp, fp, fn, tn, fnrval, tprval, tnrval, fprval]
+    #print('knn matrix arr',knn_matrix_array)
+    return knn_matrix_array
+
+  #score from using same data point for testing and training will be 100
+  #below you will find score from testing split data points with 1/3 set aside for testing
+  max_dist_test = max(test_calc)
+  i_test_calc = [i for i, v in enumerate(test_calc) if v == max_dist_test]
+  print('Max test score {} % and k = {}'.format(max_dist_test*100, list(map(lambda x: x+1, i_test_calc))))
+
+  import seaborn as sns
+  sns.set()
+  p = sns.lineplot(range(1,7), train_calc, marker='*', label='Train Calculated')
+  p = sns.lineplot(range(1,7), test_calc, marker='o', label='Test Calculated')
+  #When enumerating through test data and calculating distance at each i, it can be found that k=3(3 classification) has the best result
+  knn = KNeighborsClassifier(3)
+  knn.fit(attr_train, label_train) #run the model of train data
+  knn.score(attr_test, label_test)#test the model on test data allocated(1/3 size)
+  #print(knn.score(attr_test,label_test))
+  #plot decision boundaries
+  #add number of attributes you have to filler_feature when plotting decision boundaries
+  value = 3
+  width = 3
+  plot_decision_regions(Attributes_new.values, Label.values, clf=knn, legend=2,
+                        filler_feature_values={2: value, 3: value, 4:value, 5: value, 6:value, 7:value},
+                        filler_feature_ranges={2: width, 3: width, 4: width, 5: width, 6: width, 7:width},
+                        X_highlight=attr_test.values)
+  plt.title('KNN with Diabetes Data')
+  #plt.show()
+
+"""#**LSTM model Classify function**
+
+---
+
+1. define lstm model, as sequential ,add the layers number as 100
+2. compile the model
+3. conveert categorical atribute values as numerical dummy vals
+4. fit and evaluate the model
+5. get accuracy score
+6. get confusion matrix vals tp,fp,tn,fn
+
+"""
+
+def lstmClassify(Attributes_train, Label_train, Attr_test, Label_test):
+  from keras import Sequential
+  from keras.layers import Embedding, LSTM, Dense, Dropout
+
+  embedding_size=32
+  max_words=5000
+
+ # Attributes_new = Attributes_new.reshape((len(Attributes_new), 1, 1)) #------NEW stuff------#
+
+  print(Attributes_train.shape[1])
+  lstm_model = Sequential()
+  lstm_model.add(Embedding(max_words, embedding_size, input_length=Attributes_train.shape[1]))
+  lstm_model.add(LSTM(100))
+  lstm_model.add(Dense(2,activation='softmax'))#only binary classification, so dense val=2
+
+  print(lstm_model.summary())
+
+#categorical_crossentropy
+  lstm_model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+  
+  #---------NEW stuff ------#
+  #lstm_model.fit(Attributes_new, Label, epochs=300, shuffle=False, verbose=0)
+
+  #lstm_model.fit(Attributes_train, Label_train, epochs=5, shuffle=False, verbose=0)
+  
+  #------end NEW stuff------#
+  Label_train_tensor = pd.get_dummies(Label_train).values #Convert categorical variable into dummy/indicator variables.
+  #print('Shape of Label train tensor: ', Label_train_tensor.shape)
+  
+  #converting categorical variables in y_train to numerical variables
+  Label_test_tensor = pd.get_dummies(Label_test).values
+  #print('Shape of Label test tensor: ', Label_test_tensor.shape)
+  
+  # model evaluation
+  from keras.models import load_model
+
+  #model = load_model('MusicalInstrumentReviews.h5')
+  scores = lstm_model.evaluate(Label_test, Label_test_tensor)
+
+  LSTM_accuracy = scores[1]*100
+
+  print('Test accuracy: ', scores[1]*100, '%')
+
+  lstm_predicted = lstm_model.predict(Attr_test)
+  #print(lstm_predicted)
+
+
+  print(accuracy_scores)
+
+  #confusion matrix 
+
+  from sklearn.metrics import confusion_matrix
+  #matrix = metrics.confusion_matrix(Label_test.argmax(axis=1), lstm_predicted.argmax(axis=1))
+
+  '''lstmcm = np.array(confusion_matrix(Label_test, lstm_predicted))
+
+  lstmcm = np.array(confusion_matrix(Label_test, lstm_predicted))
+  A = lstmcm.flatten()
+  print(A, A.shape) #It prints in order TP,FP,FN,TN
+  f(4)
+  tp =A[0]
+  fp =A[1]
+  fn =A[2]
+  tn=A[3]
+  positives = tp+fp
+  print('positives:',positives)
+  negatives = fn+tn
+  print('negatives: ', negatives)
+  f(4)
+  fnrval = fnr(fn,negatives)
+  tprval = tpr(tp,positives)
+  tnrval = tnr(tn,negatives)
+  fprval = fpr(fp,positives)
+  print(fnrval)
+  print(tprval)
+  print(tnrval)
+  print(fprval)'''
+
+"""#**Split the data and run 3 models, Provide Comparison table**
+
+
+---
+
+1. split data to kfold=10  with 75% training set, 25% test set
+2. For each fold get, attributes_train, label_train, attributes_test, label_test
+3. For each fold run 3 classification functions: 1) Random Forest 2) KNN 3)LSTM
+4. For each fold ,Dataframe  with confusion matrix values compared for 3 algorithms is created
+
+"""
+
+from sklearn.model_selection import StratifiedKFold
+import itertools
+
+kf =StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+cnt = 1
+for train_index, test_index in kf.split(Attributes_new, Label):
+    cnt += 1
+    # Split dataset into training set and test set
+    a_train, a_test, l_train, l_test = train_test_split(Attributes_new, Label, test_size=0.25) # 75% training and 25% test
+    #print(a_train)
+    result = []
+    result.append(a_train)
+    result.append(a_test)
+    result.append(l_train)
+    result.append(l_test)
+    #print(result)
+    print("kfold", cnt-1)
+    print('------------------RF--------------------------')
+    randomForesClassify(a_train,l_train,a_test,l_test)
+    rf_matrix_arr = randomForesClassify(a_train,l_train,a_test,l_test)
+
+    print('------------------KNN-------------------------')
+    knnClassify(a_train,l_train,a_test,l_test)
+    knn_matrix_arr = knnClassify(a_train,l_train,a_test,l_test)
+    
+    print('------------------LSTM------------------------')
+    lstmClassify(a_train, l_train, a_test, l_test)
+
+    #kfold score comparison
+
+    df = pd.DataFrame(columns=['tp','fp','fn','tn','fnrval','tprval','tnrval','fprval'], index=['Random Forest','KNN','LSTM'])
+    for i in range(3):
+      df.loc['Random Forest'] = rf_matrix_arr
+      df.loc['KNN'] = knn_matrix_arr
+
+    print(df)
 
 #reduce the depth of the tree to 3 levels, instead of the original 100 branch tree
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import export_graphviz
 import pydot
 rf_small = RandomForestRegressor(n_estimators=10, max_depth = 3)
-rf_small.fit(train_attributes, trainLabel)
+rf_small.fit(Attributes_train, Label_train)
 # Extract the small tree
 tree_small = rf_small.estimators_[5]
 # Saving feature names for later use
@@ -69,248 +440,3 @@ attr_list = list(attributes.columns)
 export_graphviz(tree_small, out_file = 'small_tree.dot', feature_names= attr_list, rounded = True, precision = 1)
 (graph, ) = pydot.graph_from_dot_file('small_tree.dot')
 graph.write_png('small_tree.png');
-
-from sklearn.metrics import confusion_matrix
-
-print('\n \n The RandomForest confusion matrix: \n', confusion_matrix(predictedTest, testLabel))
-print('\n\n The metrics RandomForest classification report:\n ', metrics.classification_report(predictedTest, testLabel))
-
-#Area under curve
-prob = randModel.predict_proba(test_attributes)
-prob = prob[:, 1]
-
-auc = metrics.roc_auc_score(testLabel, prob)
-print('AUC score is: ',auc)
-
-#receiver operating characteristic
-from sklearn.metrics import plot_roc_curve
-from sklearn.svm import SVC
-ax = plt.gca()
-randModel_disp = plot_roc_curve(randModel, test_attributes, testLabel, ax=ax, alpha=0.8)
-svc = SVC(random_state=42)
-svc.fit(test_attributes, testLabel)
-svc_disp = plot_roc_curve(svc, test_attributes, testLabel)
-svc_disp.plot(ax=ax, alpha=0.8)
-
-plt.show()
-
-randModel = RandomForestClassifier(n_estimators=10, random_state=42)
-randModel.fit(trainAttr, trainLabel)
-ax = plt.gca()
-randModel_disp = plot_roc_curve(randModel, testAttr, testLabel, ax=ax, alpha=0.8)
-svc_disp.plot(ax=ax, alpha=0.8)
-plt.show()
-
-"""KNN Algorithm 
-
-"""
-
-#normalization range 0 and 1, perplexed as to why some data is -2.6, or 1.5
-from sklearn.preprocessing import StandardScaler
-scale_attr = StandardScaler()
-attr = pd.DataFrame(scale_attr.fit_transform(diabetes_data.drop(["Outcome"],axis=1),),
-                 columns=['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age'])
-
-attributes_new= attributes.drop('Outcome', axis = 1)
-print(scale_attr.transform(attributes_new))
-attr.head()
-
-#from sklearn.preprocessing import StandardScale
-#normalize data to calculate euclidean distance for knn algorithm
-#if the weightage is not correctly calculated the euclidean distance will be skewed for some data points
-from sklearn import preprocessing
-a = np.array(attributes)
-scaler = preprocessing.StandardScaler()
-#transform
-standrd = scaler.fit_transform(a)
-standrd
-
-ylabel = diabetes_data.Outcome
-ylabel
-
-#Test, Train, Validate after splitting data
-#split data with test size of 1/3rd of overal data size
-from sklearn.model_selection import train_test_split
-Attr_train, Attr_test, label_train, label_test = train_test_split(attr,ylabel,test_size=1/3, random_state=42, stratify=ylabel)
-
-#use knn classifier library, datascientist have to provide the value of k
-from sklearn.neighbors import KNeighborsClassifier
-test_calc = []
-train_calc = []
-for i in range(1,7):
-  knn = KNeighborsClassifier(i)
-  #knn.fit(Attr_train, label_train)
-  knn.fit(trainAttr, trainLabel)
-
-#need to graphically represent growth
-  #train_calc.append(knn.score(Attr_train, label_train))
-  #test_calc.append(knn.score(Attr_test, label_test))
-  train_calc.append(knn.score(trainAttr, trainLabel))
-  test_calc.append(knn.score(testAttr, testLabel))
-  test_calc
-
-#score from using same data point for testing and training will be 100
-#below you will find score from testing split data points with 1/3 set aside for testing
-max_dist_test = max(test_calc)
-i_test_calc = [i for i, v in enumerate(test_calc) if v == max_dist_test]
-print('Max test score {} % and k = {}'.format(max_dist_test*100, list(map(lambda x: x+1, i_test_calc))))
-
-#plot the knn results of test vs train
-#below you find mapping insulin, glucose level to outcome of diabetes
-import seaborn as sns
-sns.set()
-sns.lmplot(x="Glucose", y = "Insulin", hue = "Outcome", data=attributes )
-
-p = sns.lineplot(range(1,7), train_calc, marker='*', label='Train Calculated')
-p = sns.lineplot(range(1,7), test_calc, marker='o', label='Test Calculated')
-
-#When enumerating through test data and calculating distance at each i, it can be found that k=3(3 classification) has the best result
-knn = KNeighborsClassifier(11)
-knn.fit(Attr_train, label_train) #run the model of train data
-knn.score(Attr_test, label_test)#test the model on test data allocated(1/3 size)
-
-#plot decision boundaries
-#add number of attributes you have to filler_feature when plotting decision boundaries
-value = 3
-width = 3
-plot_decision_regions(attr.values, ylabel.values, clf=knn, legend=2,
-                      filler_feature_values={2: value, 3: value, 4:value, 5: value, 6:value, 7:value},
-                      filler_feature_ranges={2: width, 3: width, 4: width, 5: width, 6: width, 7:width},
-                      X_highlight=test_attributes.values)
-plt.title('KNN with Diabetes Data')
-plt.show()
-
-#confusion matrix
-from sklearn.metrics import confusion_matrix
-label_pred = knn.predict(Attr_test)
-confusion_matrix(label_test, label_pred)
-pd.crosstab(label_test, label_pred, rownames=['Actual'], colnames=['Predicted'], margins=True)
-
-from sklearn.metrics import confusion_matrix
-
-print('\n \n The KNN confusion matrix: \n', confusion_matrix(label_test, label_pred))
-print('\n\n The metrics KNN classification report:\n ', metrics.classification_report(label_test, label_pred))
-
-#Area under curve
-predictLabel_prob = knn.predict_proba(Attr_test)[:,1]
-
-auc = metrics.roc_auc_score(label_test, predictLabel_prob)
-print('AUC score is: ',auc)
-
-#receiver operating characteristic
-ax = plt.gca()
-knnModel_disp = plot_roc_curve(knn, Attr_test, label_test, ax=ax, alpha=0.8)
-svc = SVC(random_state=42)
-svc.fit(Attr_test, label_test)
-svc_disp = plot_roc_curve(svc, Attr_test, label_test)
-svc_disp.plot(ax=ax, alpha=0.8)
-
-"""DeepLearning Model : LSTM
-
-"""
-
-from tensorflow.keras import Sequential
-from keras.layers import Dense#, LSTM, GRU, SimpleRNN
-from keras.layers import LSTM
-from sklearn.preprocessing import MinMaxScaler
-
-lstm_dataset = np.array(attr)
-lstm_dataset.reshape(-1,1) #normalizing
-plt.plot(lstm_dataset) #visualize
-
-lstm_data=pd.read_excel('timeDiabetes.xlsx')
-
-lstm_data.head(5)
-
-lstm_data.describe()
-d_data = lstm_data.copy(deep = True)
-
-d_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']] = d_data[['Glucose','BloodPressure','SkinThickness','Insulin','BMI']].replace(0,np.NaN)
-d_data['Glucose'].fillna(d_data['Glucose'].mean(), inplace = True)
-d_data['BloodPressure'].fillna(d_data['BloodPressure'].mean(), inplace = True)
-d_data['SkinThickness'].fillna(d_data['SkinThickness'].median(), inplace = True)
-d_data['Insulin'].fillna(d_data['Insulin'].median(), inplace = True)
-d_data['BMI'].fillna(d_data['BMI'].median(), inplace = True)
-
-#split data into 25%test
-from sklearn.model_selection import train_test_split
-new_dat = lstm_data.drop('Date', axis = 1)
-new_dat.head(4)
-values = new_dat.values
-
-train_set, test_set = train_test_split(new_dat, test_size=0.25, random_state=0, stratify=new_dat['Outcome'])
-
-trainAttr = train_set[train_set.columns[:8]]
-testAttr = test_set[test_set.columns[:8]]
-trainLabel = train_set['Outcome']
-testLabel = test_set['Outcome']
-
-from sklearn.preprocessing import MinMaxScaler
-test_size = len(lstm_data) - int(len(lstm_data) * 0.75) #total size of dataset minus 75% training set size
-#trainingset=lstm_data[:int(len(train_set) * 0.75),:]
-#testingset=lstm_data[int(len(lstm_data) * 0.75):142,:]
-
-test_values = test_set.values
-
-# ensure all data is float
-
-
-# normalize features
-scaler = MinMaxScaler(feature_range=(0, 1))
-scaler_df = MinMaxScaler(feature_range=(0, 1))
-
-scaled = scaler.fit_transform(values)
-test_scaled = scaler.fit_transform(test_values)
-
-#df = scaler_df.fit_transform(df1)
-
-# train the training set and test the testing set
-train=scaled
-test=test_scaled
-
-split= round(len(train)*0.8)
-
-# split into input and outputs
-train_X0, train_y0 = train[:split, 1:], train[:split, 0]
-val_X0, val_y0 = train[split:,1:], train[split:,0]
-test_X0, test_y0 = test[:, 1:], test[:, 0]
-
-train_y=np.asarray(train_y0).reshape(( -1 , 1 ))
-val_y=np.asarray(val_y0).reshape(( -1 , 1 ))
-test_y=np.asarray(test_y0).reshape(( -1 , 1 ))
-
-# reshape input to be 3D [samples, timesteps, features]
-train_X = train_X0.reshape((train_X0.shape[0], 1, train_X0.shape[1]))
-val_X = val_X0.reshape((val_X0.shape[0], 1, val_X0.shape[1]))
-test_X = test_X0.reshape((test_X0.shape[0], 1, test_X0.shape[1]))
-
-#design cnn lstm model
-import datetime as dt
-from keras.layers import Dense, Activation, Dropout, LSTM, BatchNormalization
-from keras.models import Sequential, load_model
-from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras import optimizers
-import tensorflow as tf
-from sklearn.metrics import mean_squared_error
-lstm_model = Sequential()
-lstm_model.add(LSTM(5,input_shape=(1,lookback))) #5 neurons of first layer of neural network
-lstm_model.add(Dense(1))
-lstm_model.compile(loss='mean_squared_error', optimizer='adam',run_eagerly=True) #To avoid unexpected result of deepLearnModel.predict() function add run_eagerly
-lstm_model.summary()
-
-#model is ready for training
-
-lstm_model.build(input_shape=(5, 42))#if you dont build the function before fit it results in the following error: "ValueError: Creating variables on a non-first call to a function decorated with tf.function."
-lstm_model.fit(X_train, y_train, epochs=10, batch_size=1)
-
-history = lstm_model.fit(X_train, y_train, epochs=10, batch_size=1) 
-
-                #  , verbose=2, shuffle=False)
-# plot history
-plt.plot(history.history['loss'], label='train')
-plt.plot(history.history['val_loss'], label='test')
-plt.title("Loss in LSTM Training")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.legend()
-plt.show()
